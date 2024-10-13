@@ -1,0 +1,17 @@
+site_name: acvr
+site_url: https://janclemenslab.org/acvr
+repo_url: https://github.com/janclemenslab/acvr
+theme:
+  name: shadcn
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: false
+nav:
+  - Home: index.md
+  - Usage: usage.md
+  - API: api.md

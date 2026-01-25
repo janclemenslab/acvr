@@ -2,10 +2,11 @@
 Video reader built around PyAV for frame-accurate seeking.
 
 Supports:
-- accurate, random-access retrieval of individual frames from videos encoded with modern codecs (H.264, H.265)
+- accurate, random-access retrieval of individual frames by index or timestamp
 - works with variable-frame rate videos
-- LRU
-- Fast scrubbing mode
+- accurate, fast, and scrub read modes for different latency/precision tradeoffs
+- optional keyframe index for faster accurate seeks
+- configurable LRU caches for decoded frames and scrub keyframe buckets to speed repeat access
 
 ## Installation
 In a terminal window run:

@@ -148,3 +148,54 @@ class VideoReader:
             max_decode_frames=max_decode_frames,
             use_index=use_index,
         )
+
+    def read_frame_fast(
+        self,
+        *,
+        index: Optional[int] = None,
+        t_s: Optional[float] = None,
+        decode_rgb: bool = False,
+    ) -> DecodedFrame:
+        """Return a fast, approximate frame for an index or timestamp."""
+
+        return self._backend.read_frame_fast(
+            index=index,
+            t_s=t_s,
+            decode_rgb=decode_rgb,
+        )
+
+    def read_frame(
+        self,
+        *,
+        index: Optional[int] = None,
+        t_s: Optional[float] = None,
+        mode: str = "accurate",
+        decode_rgb: bool = False,
+        keyframe_mode: str = "previous",
+    ) -> DecodedFrame:
+        """Read a frame using a selectable access mode."""
+
+        if mode not in {"accurate", "fast", "scrub"}:
+            raise ValueError("mode must be one of: 'accurate', 'fast', 'scrub'")
+        if index is None and t_s is None:
+            raise ValueError("Provide either index or t_s")
+        if index is not None and t_s is not None:
+            raise ValueError("Provide only one of index or t_s")
+
+        if mode == "accurate":
+            if index is not None:
+                return self._backend.frame_at_index(int(index))
+            assert t_s is not None
+            return self._backend.read_frame_at(float(t_s))
+
+        if mode == "scrub":
+            if t_s is None:
+                fps = self.frame_rate or 1.0
+                t_s = float(index) / fps
+            return self._backend.read_keyframe_at(float(t_s), mode=keyframe_mode, decode_rgb=decode_rgb)
+
+        return self._backend.read_frame_fast(
+            index=index,
+            t_s=t_s,
+            decode_rgb=decode_rgb,
+        )

@@ -36,6 +36,16 @@ with VideoReader(video_file_name) as vr:  # load the video
     frame = vr[100]
 ```
 
+### Read modes
+```python
+from acvr import VideoReader
+
+with VideoReader(video_file_name, build_index=True) as vr:
+    accurate = vr.read_frame(index=100, mode="accurate")
+    fast = vr.read_frame(index=100, mode="fast")
+    scrub = vr.read_frame(t_s=1.0, mode="scrub", keyframe_mode="nearest")
+```
+
 ## Documentation
 The latest documentation lives at https://janclemenslab.org/acvr.
 
@@ -63,3 +73,12 @@ If you're using conda, you can install `ffmpeg` like this:
 ```shell
 conda install -c conda-forge ffmpeg
 ```
+
+## Benchmark snapshot
+On the bundled CFR/VFR test assets (M1-class laptop, PyAV 12.x):
+
+| Mode | CFR fast (ms/frame) | CFR accuracy | VFR fast (ms/frame) | VFR accuracy |
+| --- | --- | --- | --- | --- |
+| Accurate | ~89 | exact | ~88 | matches PyAV reference |
+| Scrub (keyframes) | ~2 | very approximate | ~2 | very approximate |
+| Fast (PyAV) | ~12 | matches OpenCV | ~12 | matches OpenCV |

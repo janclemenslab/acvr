@@ -98,6 +98,9 @@ class PyAVVideoBackend:
         self._container = av.open(path)
         self._stream = self._container.streams.video[video_stream_index]
         self._codec_ctx = self._stream.codec_context
+        self._fast_container: Optional[av.container.InputContainer] = None
+        self._fast_stream: Optional[av.video.stream.VideoStream] = None
+        self._fast_first_frame_number: Optional[int] = None
 
         self._time_base: Fraction = self._stream.time_base
         self._start_pts: int = self._stream.start_time if self._stream.start_time is not None else 0
@@ -128,6 +131,11 @@ class PyAVVideoBackend:
         """Close the underlying PyAV container."""
 
         self._container.close()
+        if self._fast_container is not None:
+            self._fast_container.close()
+            self._fast_container = None
+            self._fast_stream = None
+        self._fast_first_frame_number = None
 
     def __enter__(self) -> "PyAVVideoBackend":
         """Return self for context manager usage."""
@@ -149,6 +157,13 @@ class PyAVVideoBackend:
         """Convert presentation timestamp units to seconds."""
 
         return float((pts - self._start_pts) * self._time_base)
+
+    def _pts_to_frame_number(self, pts: Optional[int], fps: float) -> Optional[int]:
+        """Convert a PTS value to a rounded frame number."""
+
+        if pts is None:
+            return None
+        return int(round(self._pts_to_secs(int(pts)) * fps))
 
     def _frame_time_s(self, pts: Optional[int]) -> float:
         """Return the timestamp for a frame PTS."""
@@ -316,6 +331,20 @@ class PyAVVideoBackend:
 
         self._container.seek(pts, stream=self._stream, backward=backward, any_frame=False)
         self._flush_decoder()
+
+    def _ensure_fast_container(self) -> None:
+        """Initialize the fast-seek container if needed."""
+
+        if self._fast_container is not None:
+            return
+        self._fast_container = av.open(self._path)
+        self._fast_stream = self._fast_container.streams.video[self._stream.index]
+        try:
+            codec_ctx = self._fast_stream.codec_context
+            codec_ctx.thread_type = "AUTO"
+            codec_ctx.thread_count = 0
+        except Exception:
+            pass
 
     def build_keyframe_index(self, *, max_packets: Optional[int] = None) -> List[KeyframeEntry]:
         """Scan packets and store keyframe pts/time."""
@@ -521,3 +550,208 @@ class PyAVVideoBackend:
         if last is not None:
             return last
         raise RuntimeError("Could not decode any frames after seeking.")
+
+    def _read_frame_fast_simple(self, target_pts: int, *, decode_rgb: bool) -> DecodedFrame:
+        """Fallback fast seek: seek and decode first frame after PTS."""
+
+        self._ensure_fast_container()
+        assert self._fast_container is not None
+        assert self._fast_stream is not None
+
+        def grab_frame(container: av.container.InputContainer, stream: av.video.stream.VideoStream) -> Optional[DecodedFrame]:
+            for frame in container.decode(stream):
+                pts = frame.pts if frame.pts is not None else frame.dts
+                if pts is None:
+                    target_reached = True
+                else:
+                    target_reached = pts >= target_pts
+                if not target_reached:
+                    continue
+                if decode_rgb:
+                    img = frame.to_rgb().to_ndarray()
+                else:
+                    img = frame.to_ndarray(format="bgr24")
+                cur = DecodedFrame(
+                    image=img,
+                    pts=pts,
+                    time_s=self._frame_time_s(pts),
+                    key_frame=bool(getattr(frame, "key_frame", False)),
+                )
+                if pts is not None:
+                    self._frame_cache.put(int(pts), cur)
+                return cur
+            return None
+
+        self._fast_container.seek(
+            target_pts,
+            stream=self._fast_stream,
+            backward=True,
+            any_frame=True,
+        )
+        try:
+            self._fast_stream.codec_context.flush_buffers()
+        except Exception:
+            pass
+        grabbed = grab_frame(self._fast_container, self._fast_stream)
+        if grabbed is not None:
+            return grabbed
+
+        self._fast_container.seek(
+            target_pts,
+            stream=self._fast_stream,
+            backward=True,
+            any_frame=False,
+        )
+        try:
+            self._fast_stream.codec_context.flush_buffers()
+        except Exception:
+            pass
+        grabbed = grab_frame(self._fast_container, self._fast_stream)
+        if grabbed is not None:
+            return grabbed
+
+        raise RuntimeError("Failed to decode a frame after fast seek.")
+
+    def _read_frame_fast_opencv_pyav(self, target_frame: int, *, decode_rgb: bool) -> DecodedFrame:
+        """Approximate OpenCV seek behavior using PyAV."""
+
+        fps = self._frame_rate or 1.0
+        self._ensure_fast_container()
+        assert self._fast_container is not None
+        assert self._fast_stream is not None
+
+        def seek_to_frame(frame_index: int) -> None:
+            target_pts = self._secs_to_pts(frame_index / fps)
+            self._fast_container.seek(
+                target_pts,
+                stream=self._fast_stream,
+                backward=True,
+                any_frame=False,
+            )
+            try:
+                self._fast_stream.codec_context.flush_buffers()
+            except Exception:
+                pass
+
+        def frame_number_from_pts(pts: Optional[int]) -> Optional[int]:
+            num = self._pts_to_frame_number(pts, fps)
+            if num is None:
+                return None
+            if self._fast_first_frame_number is None:
+                return num
+            return num - self._fast_first_frame_number
+
+        first_frame = None
+        if self._fast_first_frame_number is None:
+            seek_to_frame(0)
+            for frame in self._fast_container.decode(self._fast_stream):
+                pts = frame.pts if frame.pts is not None else frame.dts
+                self._fast_first_frame_number = self._pts_to_frame_number(pts, fps) or 0
+                first_frame = frame
+                break
+
+        if target_frame <= 0:
+            if first_frame is None:
+                seek_to_frame(0)
+                for frame in self._fast_container.decode(self._fast_stream):
+                    first_frame = frame
+                    break
+            if first_frame is None:
+                raise RuntimeError("Failed to decode a frame after fast seek.")
+            pts = first_frame.pts if first_frame.pts is not None else first_frame.dts
+            img = first_frame.to_rgb().to_ndarray() if decode_rgb else first_frame.to_ndarray(format="bgr24")
+            cur = DecodedFrame(
+                image=img,
+                pts=pts,
+                time_s=self._frame_time_s(pts),
+                key_frame=bool(getattr(first_frame, "key_frame", False)),
+            )
+            if pts is not None:
+                self._frame_cache.put(int(pts), cur)
+            return cur
+
+        delta = 16
+        attempts = 0
+        while True:
+            start_frame = max(target_frame - delta, 0)
+            seek_to_frame(start_frame)
+            decoder = self._fast_container.decode(self._fast_stream)
+            try:
+                frame = next(decoder)
+            except StopIteration:
+                break
+
+            pts = frame.pts if frame.pts is not None else frame.dts
+            frame_number = frame_number_from_pts(pts)
+            if frame_number is None:
+                frame_number = start_frame
+
+            if frame_number < 0 or frame_number > target_frame:
+                if start_frame == 0 or delta >= 1 << 30 or attempts > 20:
+                    break
+                delta = delta * 2 if delta < 16 else int(delta * 1.5)
+                attempts += 1
+                continue
+
+            while frame_number < target_frame:
+                try:
+                    frame = next(decoder)
+                except StopIteration:
+                    frame = None
+                    break
+                pts = frame.pts if frame.pts is not None else frame.dts
+                frame_number = frame_number_from_pts(pts)
+                if frame_number is None:
+                    frame_number = target_frame
+
+            if frame is None:
+                break
+
+            pts = frame.pts if frame.pts is not None else frame.dts
+            img = frame.to_rgb().to_ndarray() if decode_rgb else frame.to_ndarray(format="bgr24")
+            cur = DecodedFrame(
+                image=img,
+                pts=pts,
+                time_s=self._frame_time_s(pts),
+                key_frame=bool(getattr(frame, "key_frame", False)),
+            )
+            if pts is not None:
+                self._frame_cache.put(int(pts), cur)
+            return cur
+
+        target_pts = self._secs_to_pts(target_frame / fps)
+        return self._read_frame_fast_simple(target_pts, decode_rgb=decode_rgb)
+
+
+    def read_frame_fast(
+        self,
+        *,
+        index: Optional[int] = None,
+        t_s: Optional[Number] = None,
+        decode_rgb: bool = False,
+    ) -> DecodedFrame:
+        """Return a fast, approximate frame for an index or timestamp."""
+
+        if index is None and t_s is None:
+            raise ValueError("Provide either index or t_s")
+        if index is not None and t_s is not None:
+            raise ValueError("Provide only one of index or t_s")
+
+        if t_s is None:
+            if index is None:
+                raise ValueError("Provide either index or t_s")
+            if index < 0:
+                index += self.number_of_frames
+            target_index = int(index)
+        else:
+            t_s = float(t_s)
+            target_index = int(round(t_s * (self._frame_rate or 1.0)))
+
+        fps = self._frame_rate or 1.0
+        target_pts = self._secs_to_pts(target_index / fps)
+
+        cached = self._frame_cache.get(target_pts)
+        if cached is not None:
+            return cached  # type: ignore[return-value]
+
+        return self._read_frame_fast_opencv_pyav(target_index, decode_rgb=decode_rgb)

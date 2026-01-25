@@ -1,44 +1,32 @@
-name: Publish to PyPI and Anaconda.org
+name: Publish
 
 on:
   release:
-    types:
-      - published
-  workflow_dispatch:
-    inputs:
-      logLevel:
-        description: 'Log level'
-        required: true
-        default: 'warning'
-      tags:
-        description: 'manual run'
+    types: [published]
 
 jobs:
-  publish_to_anaconda:
-    name: Publish to Anaconda.org
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: [3.9, '3.10', '3.11', '3.12']
-        os: [ubuntu-latest, windows-latest, macOS-13, macOS-14]
-    defaults:  # https://github.com/marketplace/actions/setup-miniconda#use-a-default-shell
-      run:
-        shell: bash -l {0}
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-    - uses: actions/checkout@v3
-    - name: Setup miniconda # https://github.com/marketplace/actions/setup-miniconda
-      uses: conda-incubator/setup-miniconda@v3
-      with:
-        auto-update-conda: true
-        channels: conda-forge,ncb,anaconda,defaults
-        python-version: 3.11
-        auto-activate-base: false
-        activate-environment: anaconda-client-env
-        environment-file: build_env.yml
-        condarc-file: condarc.yml
-    - name: Build and upload to anaconda
-      run: |
-        conda mambabuild conda/pyvideoreader -c conda-forge --python ${{ matrix.python-version }} --user ncb --token $ANACONDA_TOKEN
-      env:
-        ANACONDA_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build
+
+      - name: Build package
+        run: python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@v1.8.14
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}

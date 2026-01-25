@@ -1,45 +1,65 @@
-# Pythonic video reader
-Wrapper around [opencv's][1] `cv2.VideoCapture` to simplify reading video files in python.
+# Accurate video reader (acvr)
+Video reader built around PyAV for frame-accurate seeking.
+
+Inspired by code in [rerun.io]().
+
+Supports:
+- accurate, random-access retrieval of individual frames from videos encoded with modern codecs (H.264, H.265)
+- works with variable-frame rate videos
+- LRU
+- Fast scrubbing mode
 
 ## Installation
 In a terminal window run:
 ```shell
-conda install pyvideoreader -c ncb
+pip install acvr
 ```
 or
 ```shell
-pip install pyvideoreader
+conda install acvr -c ncb
 ```
+
 
 ## Usage
 Open a video file and read frame 100:
 ```python
-from videoreader import VideoReader
+from acvr import VideoReader
 vr = VideoReader(video_file_name)
 print(vr)  # prints video_file_name, number of frames, frame rate and frame size
 frame = vr[100]
 vr.close()
 ```
 
-Or use a [context manger][2] which takes care of opening and closing the video:
+Or use a context manager which takes care of opening and closing the video:
 ```python
 with VideoReader(video_file_name) as vr:  # load the video
     frame = vr[100]
 ```
 
-Supports slice-syntax: `vr[start:end:step]`. To iterate over all frames you need to use `vr[:]`. To read every 100th frame, starting at frame 500 and ending at frame 10000 do this:
-```python
-for frame in vr[500:10000:100]:
-    do_something_with(frame)
-```
-Lists, tuples or ranges can also be passed as indices, e.g. `vr[(42, 314, 999)]`.
+## Documentation
+The latest documentation lives at https://janclemenslab.org/acvr.
 
-Note that indexing returns a generator - each frame in the indices is read on demand which saves memory. If you need all frames at once you can convert it to a list `list(vr[start:end:frame])`.
-
-For compatibility, `videoreader` can also be used like the underlying `cv2.VideoCapture`:
-```python
-ret, frame = vr.read()  # read next frame
+To build the docs locally:
+```shell
+pip install acvr[docs]
+mkdocs serve
 ```
 
-[1]: http://opencv.org
-[2]: https://jeffknupp.com/blog/2016/03/07/python-with-context-managers/
+## Publishing
+Build and upload the distribution to PyPI:
+```shell
+python -m build
+python -m twine upload dist/*
+```
+
+## Test videos
+The test video generator script `scripts/make_test_h264_videos.py` requires `ffmpeg`
+to be available on your PATH. The script also needs OpenCV; install the dev extras
+to pull in a headless build:
+```shell
+pip install acvr[dev]
+```
+If you're using conda, you can install `ffmpeg` like this:
+```shell
+conda install -c conda-forge ffmpeg
+```

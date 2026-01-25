@@ -7,7 +7,7 @@ here = os.path.abspath(os.path.dirname(__file__))
 
 
 def read(*parts):
-    with codecs.open(os.path.join(here, *parts), 'r') as fp:
+    with codecs.open(os.path.join(here, *parts), "r") as fp:
         return fp.read()
 
 
@@ -20,6 +20,6 @@ def find_version(*file_paths):
 
 
 setup(
-    name='pyvideoreader',
-    version=find_version("src/videoreader.py"),
+    name="acvr",
+    version=find_version("src/acvr/__init__.py"),
 )

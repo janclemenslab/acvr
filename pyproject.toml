@@ -3,28 +3,29 @@ requires = ["flit_core >=3.4,<4"]
 build-backend = "flit_core.buildapi"
 
 [project]
-name = "pyvideoreader"
+name = "acvr"
 authors = [
     {name = "Jan Clemens", email = "clemensjan@googlemail.com"}
 ]
 classifiers = ["License :: OSI Approved :: MIT License"]
 requires-python = ">=3.9"
-dependencies = ["opencv-python-headless>=3.0"]
-# dependencies = [
-#     'opencv-python-headless>=3.0; python_version < "3.10"',
-#     'opencv-python; python_version >= "3.10"',
-# ]
+dependencies = ["av", "numpy"]
+
 readme = "README.md"
-description = "Wrapper around opencv's cv2.VideoCapture to simplify reading video files in python."
+description = "Accurate video reader for python."
 dynamic = ["version"]
 license = {file = "LICENSE"}
 
+[project.optional-dependencies]
+dev = ["opencv-python-headless", "pytest"]
+docs = ["mkdocs", "mkdocs-shadcn", "mkdocstrings[python]"]
+
 [project.urls]
-Documentation = "https://github.com/postpop/videoreader"
-Source = "https://github.com/postpop/videoreader"
+Documentation = "https://janclemenslab.org/acvr"
+Source = "https://github.com/janclemenslab/acvr"
 
 [tool.flit.module]
-name = "videoreader"
+name = "acvr"
 
 [tool.pytest.ini_options]
 minversion = "6.0"

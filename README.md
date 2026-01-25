@@ -1,8 +1,6 @@
 # Accurate video reader (acvr)
 Video reader built around PyAV for frame-accurate seeking.
 
-Inspired by code in [rerun.io]().
-
 Supports:
 - accurate, random-access retrieval of individual frames from videos encoded with modern codecs (H.264, H.265)
 - works with variable-frame rate videos
@@ -13,10 +11,6 @@ Supports:
 In a terminal window run:
 ```shell
 pip install acvr
-```
-or
-```shell
-conda install acvr -c ncb
 ```
 
 
@@ -46,6 +40,15 @@ with VideoReader(video_file_name, build_index=True) as vr:
     scrub = vr.read_frame(t_s=1.0, mode="scrub", keyframe_mode="nearest")
 ```
 
+## Benchmark snapshot
+On the bundled CFR/VFR test assets (M1-class laptop, PyAV 12.x):
+
+| Mode | CFR fast (ms/frame) | CFR accuracy | VFR fast (ms/frame) | VFR accuracy |
+| --- | --- | --- | --- | --- |
+| Accurate | ~89 | exact | ~88 | matches PyAV reference |
+| Scrub (keyframes) | ~2 | very approximate | ~2 | very approximate |
+| Fast (PyAV) | ~12 | matches OpenCV | ~12 | matches OpenCV |
+
 ## Documentation
 The latest documentation lives at https://janclemenslab.org/acvr.
 
@@ -58,8 +61,9 @@ mkdocs serve
 ## Publishing
 Build and upload the distribution to PyPI:
 ```shell
-python -m build
-python -m twine upload dist/*
+pip install flit
+flit build
+flit publish
 ```
 
 ## Test videos
@@ -69,16 +73,3 @@ to pull in a headless build:
 ```shell
 pip install acvr[dev]
 ```
-If you're using conda, you can install `ffmpeg` like this:
-```shell
-conda install -c conda-forge ffmpeg
-```
-
-## Benchmark snapshot
-On the bundled CFR/VFR test assets (M1-class laptop, PyAV 12.x):
-
-| Mode | CFR fast (ms/frame) | CFR accuracy | VFR fast (ms/frame) | VFR accuracy |
-| --- | --- | --- | --- | --- |
-| Accurate | ~89 | exact | ~88 | matches PyAV reference |
-| Scrub (keyframes) | ~2 | very approximate | ~2 | very approximate |
-| Fast (PyAV) | ~12 | matches OpenCV | ~12 | matches OpenCV |

@@ -17,7 +17,7 @@ dynamic = ["version"]
 license = {file = "LICENSE"}
 
 [project.optional-dependencies]
-dev = ["opencv-python-headless", "pytest"]
+dev = ["opencv-python-headless", "pytest", "flit"]
 docs = ["mkdocs", "mkdocs-shadcn", "mkdocstrings[python]"]
 
 [project.urls]

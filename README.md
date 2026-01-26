@@ -8,6 +8,9 @@ Supports:
 - optional keyframe index for faster accurate seeks
 - configurable LRU caches for decoded frames and scrub keyframe buckets to speed repeat access
 
+Documentation at https://janclemenslab.org/acvr.
+
+
 ## Installation
 In a terminal window run:
 ```shell

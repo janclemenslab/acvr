@@ -67,3 +67,37 @@ def test_backend_read_frame_at() -> None:
         assert frame.time_s >= 0.0
     finally:
         backend.close()
+
+
+def test_backend_read_keyframe_at() -> None:
+    """Ensure keyframe read returns a decoded frame."""
+
+    video_path = Path(__file__).resolve().parent / "data" / "test_cfr_h264.mp4"
+    if not video_path.exists():
+        pytest.skip(f"Missing test video: {video_path}")
+
+    backend = PyAVVideoBackend(str(video_path), build_index=True)
+    try:
+        frame = backend.read_keyframe_at(0.5)
+        assert frame.image.ndim == 3
+        assert frame.pts is not None
+    finally:
+        backend.close()
+
+
+def test_backend_read_frame_fast() -> None:
+    """Ensure fast frame read returns a decoded frame."""
+
+    video_path = Path(__file__).resolve().parent / "data" / "test_cfr_h264.mp4"
+    if not video_path.exists():
+        pytest.skip(f"Missing test video: {video_path}")
+
+    backend = PyAVVideoBackend(str(video_path))
+    try:
+        frame = backend.read_frame_fast(index=10, decode_rgb=True)
+        assert frame.image.ndim == 3
+        assert frame.pts is not None
+        with pytest.raises(ValueError):
+            backend.read_frame_fast(index=1, t_s=0.1)
+    finally:
+        backend.close()

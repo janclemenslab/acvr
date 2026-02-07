@@ -84,3 +84,33 @@ def test_slice(tmp_path):
         brightness = np.mean(frame)
         assert brightness >= frame_number - 2 and brightness <= frame_number + 2
 
+
+def test_read_next(tmp_path):
+    """Validate sequential read_next access."""
+    from acvr import VideoReader
+    import numpy as np
+
+    video_path = make_test_video(tmp_path)
+    vr = VideoReader(video_path)
+
+    for frame_number in range(5):
+        frame = vr.read_next()
+        brightness = np.mean(frame)
+        assert brightness >= frame_number - 2 and brightness <= frame_number + 2
+
+
+def test_read_frame_sequential_switch(tmp_path):
+    """Ensure read_frame switches to sequential decoding."""
+    from acvr import VideoReader
+    import numpy as np
+
+    video_path = make_test_video(tmp_path)
+    vr = VideoReader(video_path)
+
+    for frame_number in range(3):
+        frame = vr.read_frame(index=frame_number, mode="accurate", use_sequential=True).image
+        brightness = np.mean(frame)
+        assert brightness >= frame_number - 2 and brightness <= frame_number + 2
+
+    assert vr._backend._seq_decoder is not None
+    assert vr._backend._seq_frame_index >= 3

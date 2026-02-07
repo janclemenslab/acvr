@@ -87,10 +87,10 @@ def main():
     parser.add_argument("--out-dir", default="tests/data", help="Output directory.")
     parser.add_argument("--width", type=int, default=640)
     parser.add_argument("--height", type=int, default=360)
-    parser.add_argument("--frames", type=int, default=240)
+    parser.add_argument("--frames", type=int, default=2000)
     parser.add_argument("--cfr-fps", type=int, default=30)
     parser.add_argument("--gop-mode", choices=["default", "hard", "very-hard"],
-                        default="default",
+                        default="hard",
                         help="GOP difficulty preset for random-access.")
     parser.add_argument("--keep-frames", action="store_true")
     args = parser.parse_args()
@@ -119,6 +119,7 @@ def main():
 
     cfr_output = out_dir / "test_cfr_h264.mp4"
     vfr_output = out_dir / "test_vfr_h264.mp4"
+    noindex_output = out_dir / "test_noindex_h264.mp4"
     gop = gop_args(args.gop_mode)
 
     run_ffmpeg([
@@ -149,6 +150,14 @@ def main():
         str(vfr_output),
     ])
 
+    run_ffmpeg([
+        "ffmpeg", "-y",
+        "-i", str(cfr_output),
+        "-c", "copy",
+        "-movflags", "+frag_keyframe+empty_moov+default_base_moof",
+        str(noindex_output),
+    ])
+
     if args.keep_frames:
         shutil.copytree(cfr_frames, out_dir / "frames_cfr", dirs_exist_ok=True)
         shutil.copytree(vfr_frames, out_dir / "frames_vfr", dirs_exist_ok=True)
@@ -156,6 +165,7 @@ def main():
     shutil.rmtree(temp_root, ignore_errors=True)
     print(f"Wrote {cfr_output}")
     print(f"Wrote {vfr_output}")
+    print(f"Wrote {noindex_output}")
 
 
 if __name__ == "__main__":

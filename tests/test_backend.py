@@ -85,6 +85,29 @@ def test_backend_read_keyframe_at() -> None:
         backend.close()
 
 
+def test_backend_read_keyframe_at_edges() -> None:
+    """Keyframe seeks should work at start and near end of stream."""
+
+    video_path = Path(__file__).resolve().parent / "data" / "test_cfr_h264.mp4"
+    if not video_path.exists():
+        pytest.skip(f"Missing test video: {video_path}")
+
+    backend = PyAVVideoBackend(str(video_path), build_index=True)
+    try:
+        # Start of stream
+        f0 = backend.read_keyframe_at(0.0)
+        assert f0.image.ndim == 3
+        assert f0.key_frame
+
+        # Near end of stream
+        fps = backend.frame_rate or 1.0
+        t_end = (backend.number_of_frames - 1) / fps
+        f_end = backend.read_keyframe_at(max(0.0, t_end - 1e-3))
+        assert f_end.image.ndim == 3
+        assert f_end.key_frame
+    finally:
+        backend.close()
+
 def test_backend_read_frame_fast() -> None:
     """Ensure fast frame read returns a decoded frame."""
 

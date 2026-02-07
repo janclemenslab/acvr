@@ -3,12 +3,13 @@ Video reader built around PyAV for frame-accurate seeking.
 
 Supports:
 - accurate, random-access retrieval of individual frames by index or timestamp
+- fast sequential reading through indexing or iterator-style access
 - works with variable-frame rate videos
 - accurate, fast, and scrub read modes for different latency/precision tradeoffs
 - optional keyframe index for faster accurate seeks
 - configurable LRU caches for decoded frames and scrub keyframe buckets to speed repeat access
 
-Documentation at https://janclemenslab.org/acvr.
+Documentation at [https://janclemenslab.org/acvr]().
 
 
 ## Installation
@@ -38,20 +39,51 @@ with VideoReader(video_file_name) as vr:  # load the video
 ```python
 from acvr import VideoReader
 
-with VideoReader(video_file_name, build_index=True) as vr:
+with VideoReader(video_file_name) as vr:
     accurate = vr.read_frame(index=100, mode="accurate")
+    # VFR-aware accurate: map index -> timestamp using nominal FPS (guessed_rate)
+    accurate_tl = vr.read_frame(index=100, mode="accurate_timeline")
     fast = vr.read_frame(index=100, mode="fast")
-    scrub = vr.read_frame(t_s=1.0, mode="scrub", keyframe_mode="nearest")
+    # Scrub defaults to nearest keyframe; adjust with keyframe_mode if needed
+    scrub = vr.read_frame(t_s=1.0, mode="scrub")
 ```
 
-## Benchmark snapshot
-On the bundled CFR/VFR test assets (M1-class laptop, PyAV 12.x):
+## Benchmarking
+See the Benchmarking docs for the full benchmark suite and reproducible runs:
+[https://janclemenslab.org/acvr/benchmark/]().
 
-| Mode | CFR fast (ms/frame) | CFR accuracy | VFR fast (ms/frame) | VFR accuracy |
-| --- | --- | --- | --- | --- |
-| Accurate | ~89 | exact | ~88 | matches PyAV reference |
-| Scrub (keyframes) | ~2 | very approximate | ~2 | very approximate |
-| Fast (PyAV) | ~12 | matches OpenCV | ~12 | matches OpenCV |
+### Scrub tuning
+For tighter scrub accuracy across varied assets, prefer `keyframe_mode='nearest'` (the default)
+and a smaller scrub bucket such as `scrub_bucket_ms=25`:
+```python
+from acvr import VideoReader
+vr = VideoReader(video_file_name, scrub_bucket_ms=25)
+preview = vr.read_frame(t_s=1.5, mode="scrub")  # nearest keyframe
+```
+
+### Color conversion and performance
+All modes decode to RGB by default for consistent analysis of pixel values.
+If you need slightly higher throughput and do not require RGB, pass `decode_rgb=False`
+to `read_frame`, `read_frame_fast`, or `read_keyframe_at` to avoid the conversion.
+This typically provides a marginal speedup and returns BGR for fast paths.
+
+### Sequential reads
+For dense, in-order processing, prefer sequential access:
+```python
+from acvr import VideoReader
+
+with VideoReader(video_file_name) as vr:
+    for frame in vr:  # sequential decoder
+        pass
+```
+Sequential reads avoid per-frame seeking and are substantially faster than
+random-access reads.
+
+### Indexing semantics
+- `accurate`: index is the decode-order frame count (exact on CFR; may differ from nominal timeline on VFR).
+- `accurate_timeline`: index is treated as timeline index based on nominal FPS (guessed_rate), and an accurate seek is used at that timestamp.
+- `fast`: approximate, timeline-oriented, low-latency access (good alignment on VFR).
+- `scrub`: keyframes only; fastest previews.
 
 ## Documentation
 The latest documentation lives at https://janclemenslab.org/acvr.
